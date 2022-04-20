@@ -1,0 +1,43 @@
+.LoginSendButton {
+    margin: 10px;
+    color: #ddd;
+    background-color: #343a40;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    font-size: 18px;
+    padding: 8px 20px;
+    font-weight: bold;
+    position:relative;
+    left: 0px;
+}
+
+.LoginForm {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 18px;
+}
+.LoginInput {
+    display: block;
+    margin-top: 8px;
+    width: 95%;
+    border-color: rgba(0, 0, 0, 0.125);
+}
+
+.LoginBoard {
+    margin-bottom: 10px;
+}
+.SignupShot {
+    width:auto;
+    height:100%;
+}
+
+.SignupImgBoard {
+    margin-bottom: 10px;
+    display:inline-block;
+    position:relative;
+    width:200px;
+    height:200px;
+    overflow:hidden;
+    border-radius:50%;
+    border-style:solid;
+}

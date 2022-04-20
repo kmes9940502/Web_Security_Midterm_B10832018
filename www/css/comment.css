@@ -1,0 +1,22 @@
+.TextPad {
+    margin: 0 auto;
+    font-family: "monospace", "微軟正黑體";
+    border-radius: 8px;
+    padding: 12px 12px;
+    color: #6c6c6c;
+    box-sizing: border-box;
+    word-wrap:break-word
+}
+.CommentInfo {
+    font-size: 12px;
+    font-weight: bold;
+    position: relative;
+    color: #606c7e;
+}
+.Author {
+    font-family: "monospace", "微軟正黑體";
+    font-size: 100%;
+    font-weight: bold;
+    vertical-align: baseline;
+    background: transparent;
+}

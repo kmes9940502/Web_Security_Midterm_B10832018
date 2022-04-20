@@ -1,0 +1,5 @@
+docker-compose.yml
+www/file/
+www/shot/
+www/config.php
+web-image/
