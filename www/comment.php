@@ -37,7 +37,7 @@
                 <?php }?>
             <button class="SubmitButton" onclick="window.open('index.php','_self')">返回</button>
             <?php if(isset($row["file"]) && $row["file"] != ""){ ?>
-                <button class="SubmitButton" onclick="window.open('api.php?method=download&file=<?php echo $row["file"] ?>','_self')">下載</button>
+                <button class="SubmitButton" onclick="window.open('api.php?method=download&fl=<?php echo $row["file"] ?>','_self')">下載</button>
                 <nobr><?php echo substr($row["file"], 5)?></nobr>
             <?php } ?>
             </p>

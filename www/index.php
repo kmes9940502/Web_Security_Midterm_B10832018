@@ -1,5 +1,5 @@
 <?php 
-    require_once "config.php";
+    require_once("config.php");
     session_start();
     $sql = "SELECT * FROM `comment` ORDER BY `time` DESC";
 	$result = mysqli_query($link , $sql) or die('MySQL query error');

@@ -1,5 +1,6 @@
 docker-compose.yml
 www/file/
 www/shot/
+www/temp/
 www/config.php
 web-image/

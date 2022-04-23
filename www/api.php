@@ -27,22 +27,36 @@ switch ($_GET["method"]) {
 }
 //TODO:這邊要做字串驗證
 function login() {
-
+    //不合格輸入處理
+    //輸入為空白
+    $username = htmlspecialchars($_POST['username']);
+    $password = htmlspecialchars($_POST['password']);
     if( !isset($_POST['username']) || !isset($_POST['password']) || $_POST['username']=="" || $_POST['password']=="" ){
-        
+        echo "<script type='text/javascript'>";
+        echo "alert('請輸入字串');";
+        echo "location.href='login.php';";
+        echo "</script>";
+        return;
     }
-    $username = $_POST['username'];
-    $password = $_POST['password'];
-    require_once('config.php');
-    $sql = "SELECT * FROM `account` WHERE `username` = '$username' and `password` = '$password';";
+    if(StringCheck($username)===false || StringCheck($password) === false){
+        echo "<script type='text/javascript'>";
+        echo "alert('請使用英文大小寫或數字');";
+        echo "location.href='login.php';";
+        echo "</script>";
+        return;
+    }
     
-    $result=mysqli_query($link,$sql);
-    mysqli_close($link);
+    
+    require_once('config.php');
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `username` = ? and `password` = ?;");
+    $stmt->bind_param("ss", $username, $password);
+    $stmt->execute();
+    $result = $stmt->get_result();
     try {
-        $row = mysqli_fetch_array($result);   
+        $row = $result->fetch_assoc();   
         if($row){
             session_start();
-	    	$_SESSION["username"] = $row['username'];
+            $_SESSION["username"] = $row['username'];
             header("Location: index.php");
         }else{
             echo "<script type='text/javascript'>";
@@ -50,86 +64,123 @@ function login() {
             echo "location.href='login.php';";
             echo "</script>";
         }
+        $stmt->close();
+        $link->close();
     }
     catch (Exception $e) {
-        echo 'Caught exception: ', $e->getMessage(), '<br>';
-        echo 'Check credentials in config file at: ', $Mysql_config_location, '\n';
+        #echo 'Caught exception: ', $e->getMessage(), '<br>';
+        #echo 'Check credentials in config file at: ', $Mysql_config_location, '\n';
+        echo 'error occur';
     }
+    
 }
 //TODO:要做輸入字串驗證
 //上傳檔案
 function signup() {
-
+    
     //輸入帳號密碼確認
     if( !isset($_POST['username']) || !isset($_POST['password']) || !isset($_POST['name']) 
     || $_POST['username']=="" || $_POST['password']=="" || $_POST['name']==""){
+        #echo phpinfo();
         echo "<script type='text/javascript'>";
         echo "alert('欄位不能為空');";
         echo "location.href='signup.php';";
         echo "</script>";
+        return;
     }
-    $username = $_POST['username'];
-    $password = $_POST['password'];
-    $name = $_POST['name'];
+    $username = htmlspecialchars($_POST['username']);
+    $password = htmlspecialchars($_POST['password']);
+    $name = htmlspecialchars($_POST['name']);
+    if(StringCheck($username) == false || StringCheck($password) == false){
+        echo "<script type='text/javascript'>";
+        echo "alert('帳號密碼請使用英文大小寫或數字');";
+        echo "location.href='signup.php';";
+        echo "</script>";
+        return;
+    }
     //確認帳號是否已被註冊
     require_once('config.php');
-    $sql = "SELECT * FROM `account` WHERE `username` = '$username';";
-    
-    $result=mysqli_query($link,$sql);
-    $row = mysqli_fetch_array($result);
-    
+
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `username` = ?;");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    $row = $result->fetch_assoc();
     if($row != ""){
-        mysqli_close($link);
+        
         echo "<script type='text/javascript'>";
         echo "alert('此帳號已被註冊');";
         echo "location.href='signup.php';";
         echo "</script>";
+        $stmt->close();
+        $link->close();
+        return;
     }else{//成功通過驗證
         //大頭照處理
         $finaldest = "";
         $dest = "shot/";
+        //如果有上傳圖片
         //從檔案上傳
         if($_POST['from'] == "file"){
             $tempFile=$_FILES['img'];
             //確認上傳是否成功
             if ($tempFile['error'] === UPLOAD_ERR_OK){
                 //確認檔案大小 < 1MB
-                if(($tempFile['size'] / 1024)< 1024){
-                    ImageProcessing($tempFile, $dest);
+                $exec = ImageProcessing($tempFile, $dest);
+                if($exec === true){
                     $finaldest=$dest . $tempFile['name'];
                 }
                 else{
                     echo "<script type='text/javascript'>";
-                    echo "alert('照片大小限制為1MB');";
                     echo "location.href='signup.php';";
                     echo "</script>";
+                    return;
                 }   
-            }
-            else {
-                echo '錯誤代碼：' . $tempFile['error'] . '<br/>';
             }
         }
         //從url上傳
         else{
             $url=$_POST["urlTest"];
             $filename = 'shot/' . basename($url);
+            if(isImage($url) === false){
+                echo "<script type='text/javascript'>";
+                echo "alert('照片格式錯誤');";
+                echo "location.href='signup.php';";
+                echo "</script>";
+                return;
+            }
             $img=file_get_contents($url);
-            file_put_contents($filename,$img);
-            $finaldest = $filename;
+            if($img === false){
+                echo "<script type='text/javascript'>";
+                echo "alert('上傳照片失敗,請重新再試一次');";
+                echo "location.href='signup.php';";
+                echo "</script>";
+                return;
+            }
+            else{
+                file_put_contents($filename,$img);
+                $finaldest = $filename;
+            }
+            
         }
         
         if($finaldest===""){
             $finaldest="default.png";
         }
-        
-        $sql="INSERT INTO `account` (`username`, `name`, `password`, `pic`, `authority`) VALUES ('$username', '$name', '$password', '$finaldest', '0')";
-        $result = mysqli_query($link , $sql) or die("MySQL query error");
-        mysqli_close($link);
+
+        $auth = 0;
+        $stmtinsert = $link->prepare("INSERT INTO `account` (`username`, `name`, `password`, `pic`, `authority`) VALUES (?, ?, ?, ?, ?)");
+        $stmtinsert->bind_param("ssssi", $username, $name, $password, $finaldest, $auth);
+        $stmtinsert->execute();
         echo "<script type='text/javascript'>";
         echo "alert('註冊成功,請登入');";
         echo "location.href='login.php';";
         echo "</script>";
     }
+    $stmtinsert->close();
+    $stmt->close();
+    $link->close();
 
 }
 
@@ -149,23 +200,33 @@ function addcomment() {
     require_once('config.php');
 
     session_start();
-    $username = $_SESSION["username"];
+    $username = htmlspecialchars($_SESSION["username"]);
     $content = bbcodeconverter($_POST["content"]);
-    $sql = "SELECT * FROM `account` WHERE `username` = '$username';";
-    $result=mysqli_query($link,$sql);
-    $row = mysqli_fetch_array($result);
+
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `username` = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+
     $nickname = $row['name'];
     if(!isset($_POST['content']) || $_POST['content']==""){
+        $link->close();
         echo "<script type='text/javascript'>";
         echo "alert('留言內容不能為空');";
         echo "location.href='index.php';";
         echo "</script>";
+        return;
     }
     if(!isset($_SESSION['username']) || $_SESSION['username']==""){
+        $stmt->close();
+        $link->close();
         echo "<script type='text/javascript'>";
         echo "alert('登入異常,請重新登入');";
         echo "location.href='index.php';";
         echo "</script>";
+        return;
     }
     $time = date('Y-m-d H:i:s');
 
@@ -174,14 +235,21 @@ function addcomment() {
     $dest = "file/";
     $finaldest = "";
     if ($tempFile['error'] === UPLOAD_ERR_OK){
-        UploadFile($tempFile);
+        //這邊要做上傳失敗不送出留言
+        $success = UploadFile($tempFile);
+        if($success === false){
+            return;
+        }
         $finaldest = $dest . $tempFile['name'];
     }
 
 
-    $sql = "INSERT INTO `comment` (`author`, `nickname`, `content`, `file`, `time`) VALUES ('$username', '$nickname', '$content', '$finaldest', '$time')";
-    $result = mysqli_query($link , $sql) or die('MySQL query error');
-    mysqli_close($link);
+    $stmt = $link->prepare("INSERT INTO `comment` (`author`, `nickname`, `content`, `file`, `time`) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("sssss", $username, $nickname, $content, $finaldest, $time);
+    $stmt->execute();
+
+    $stmt->close();
+    $link->close();
     echo "<script type='text/javascript'>";
     echo "location.href='index.php';";
     echo "</script>";
@@ -189,15 +257,24 @@ function addcomment() {
 function del(){
     require_once('config.php');
     session_start();
-    $id = $_GET["id"];
-    $sql = "SELECT `author` FROM `comment` WHERE id = $id";
-    $result = mysqli_query($link , $sql) or die('MySQL query error');
-    $row = mysqli_fetch_array($result);
+    $id = htmlspecialchars($_GET["id"]);
 
-    if($_SESSION["username"] == $row["author"]){
-        $sql = "DELETE FROM `comment` WHERE id = $id";
-        $result = mysqli_query($link , $sql) or die('MySQL query error');
-        mysqli_close($link);
+    $stmt = $link->prepare("SELECT `author`, `file` FROM `comment` WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+
+    //刪除檔案
+    if(file_exists($row["file"])){
+        unlink($row["file"]);
+    }
+    if(htmlspecialchars($_SESSION["username"]) == $row["author"]){
+        $stmt = $link->prepare("DELETE FROM `comment` WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        
         echo "<script type='text/javascript'>";
         echo "alert('刪除留言成功');";
         echo "location.href='index.php';";
@@ -208,7 +285,10 @@ function del(){
         echo "alert('你沒有權限刪除這則留言');";
         echo "location.href='index.php';";
         echo "</script>";
+        return;
     }
+    $stmt->close();
+    $link->close();
     
 }
 function changetitle() {
@@ -221,14 +301,15 @@ function changetitle() {
         echo "alert('欄位不能為空');";
         echo "location.href='index.php';";
         echo "</script>";
+        return;
     }
     $sql = "UPDATE `webtitle` SET `title`='$title' WHERE `id`=1";
     $result = mysqli_query($link , $sql) or die('MySQL query error');
     mysqli_close($link);
-        echo "<script type='text/javascript'>";
-        echo "alert('修改成功');";
-        echo "location.href='index.php';";
-        echo "</script>";
+    echo "<script type='text/javascript'>";
+    echo "alert('修改成功');";
+    echo "location.href='index.php';";
+    echo "</script>";
     
 }
 
@@ -260,40 +341,73 @@ function ImageProcessing($fileInput, $dest){
     //echo '檔案大小: ' . ($fileInput['size'] / 1024) . ' KB<br/>';
     //echo '暫存名稱: ' . $fileInput['tmp_name'] . '<br/>';
     
-    # 檢查檔案是否已經存在
+    # 檢查檔案是否合法
     if (file_exists('shot/' . $fileInput['name'])){
         echo "<script type='text/javascript'>";
         echo "alert('檔案已存在,請更改檔名');";
         echo "</script>";
-    } else {
+        return false;
+    }
+    else if(($fileInput['size'] / 1024)> 1024){
+        echo "<script type='text/javascript'>";
+        echo "alert('照片大小限制為1MB');";
+        echo "</script>";
+        return false;
+    }
+    else if(isImage($fileInput['tmp_name']) === false){
+        echo "<script type='text/javascript'>";
+        echo "alert('照片格式錯誤');";
+        echo "</script>";
+        return false;
+    }
+    else {
         $file = $fileInput['tmp_name'];
         $dest = $dest . $fileInput['name'];
     
         //將檔案移至指定位置
         move_uploaded_file($file, $dest);
+        return true;
     }
 }
 function UploadFile($tempFile) {
 
+    require_once('config.php');
+    require_once('AES.php');
+    $AES = new AES(AES_PASSWORD);
   //檢查檔案是否已經存在
   if (file_exists('file/' . $tempFile['name'])){
     echo "<script type='text/javascript'>";
     echo "alert('檔案已存在,請更改檔名');";
+    echo "location.href='index.php';";
     echo "</script>";
-  } else {
+    return false;
+  } 
+  else if(($tempFile['size'] / 1024)> 1024){
+    echo "<script type='text/javascript'>";
+    echo "alert('檔案過大,限制為1MB');";
+    echo "location.href='index.php';";
+    echo "</script>";
+    return false;
+  }
+  else {
     $file = $tempFile['tmp_name'];
     $dest = 'file/' . $tempFile['name'];
-    
-    //將檔案移至指定位置
-    move_uploaded_file($file, $dest);
-  }
+    $enc = $AES -> encrypt(file_get_contents($file));
+    setFile($enc, $dest);
+    return true;
+    }
+
 
 }
 
 function DownloadFile(){
-    if(isset($_GET["file"])){
-        $file = $_GET["file"];
+    require_once('config.php');
+    require_once('AES.php');
+
+    if(isset($_GET["fl"])){
+        $file = $_GET["fl"];
         if (file_exists($file)) {
+            
             header('Content-Description: File Transfer');
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename='.basename($file));
@@ -302,9 +416,22 @@ function DownloadFile(){
             header('Cache-Control: must-revalidate');
             header('Pragma: public');
             header('Content-Length: ' . filesize($file));
-            ob_clean();
+            #ob_clean();
             flush();
-            readfile($file);
+            $AES = new AES(AES_PASSWORD);
+            //加入到string
+            $content = file_get_contents($file);
+            //解密
+            $temp =  $AES->decrypt($content);
+
+            echo "<script type='text/javascript'>";
+            echo "alert($temp);";
+            echo "</script>";
+
+            //放入站存資料夾
+            #$tempDest = 'temp/'.substr($file, 5);
+            #setFile($temp, $tempDest);
+            #readfile($tempDest);
             exit;
         }
     }
@@ -313,9 +440,54 @@ function DownloadFile(){
         echo "alert('檔案獲取失敗,可能已損毀');";
         echo "location.href='index.php';";
         echo "</script>";
+        return;
     }
-    
- 
-    
+}
+
+function StringCheck($string) {
+    if(preg_match('/(?=.*[a-zA-Z0-9])/', $string)){
+        return true;
+    } else{
+        return false;
+    }
+}
+
+function isImage($path)
+{
+	$a = getimagesize($path);
+    try{
+        if($a ==false){
+            return false;
+        }
+        $image_type = $a[2];
+        
+        if(in_array($image_type , array(IMAGETYPE_GIF , IMAGETYPE_JPEG ,IMAGETYPE_PNG , IMAGETYPE_BMP)))
+        {
+            return true;
+        }
+        return false;
+    }
+    catch (Exception $e){
+        return false;
+    }
+}
+function setFile($msg, $dest)
+{
+    //取出目錄路徑中目錄(不包括後面的檔案)
+    #$dir_name = dirname($dest);
+
+    //如果目錄不存在就建立
+    #if(!file_exists($dir_name)) {
+    #    mkdir(iconv("UTF-8", "GBK", $dir_name), 0777, true);
+    #}
+
+    $fp = fopen($dest, "w");
+    fwrite($fp, $msg);
+    fclose($fp);
+}
+function decrypt($key, $garble)
+{
+    list($encrypted_data, $iv) = explode('::', base64_decode($garble), 2);
+    return openssl_decrypt($encrypted_data, 'aes-256-cbc', $key, 0, $iv);
 }
 ?>
