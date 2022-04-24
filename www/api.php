@@ -70,7 +70,6 @@ function login() {
     catch (Exception $e) {
         #echo 'Caught exception: ', $e->getMessage(), '<br>';
         #echo 'Check credentials in config file at: ', $Mysql_config_location, '\n';
-        echo 'error occur';
     }
     
 }
@@ -81,7 +80,6 @@ function signup() {
     //輸入帳號密碼確認
     if( !isset($_POST['username']) || !isset($_POST['password']) || !isset($_POST['name']) 
     || $_POST['username']=="" || $_POST['password']=="" || $_POST['name']==""){
-        #echo phpinfo();
         echo "<script type='text/javascript'>";
         echo "alert('欄位不能為空');";
         echo "location.href='signup.php';";
@@ -143,6 +141,7 @@ function signup() {
         else{
             $url=$_POST["urlTest"];
             $filename = 'shot/' . basename($url);
+            $tempname = 'shot/'.'temp'.basename($url);
             if(isImage($url) === false){
                 echo "<script type='text/javascript'>";
                 echo "alert('照片格式錯誤');";
@@ -159,7 +158,9 @@ function signup() {
                 return;
             }
             else{
-                file_put_contents($filename,$img);
+                file_put_contents($tempname,$img);
+                breakImage($tempname, $filename);
+                unlink($tempname);
                 $finaldest = $filename;
             }
             
@@ -250,9 +251,7 @@ function addcomment() {
 
     $stmt->close();
     $link->close();
-    echo "<script type='text/javascript'>";
-    echo "location.href='index.php';";
-    echo "</script>";
+    header('Location: index.php');
 }
 function del(){
     require_once('config.php');
@@ -267,8 +266,8 @@ function del(){
     $stmt->close();
 
     //刪除檔案
-    if(file_exists($row["file"])){
-        unlink($row["file"]);
+    if(file_exists($row["file"].".zip")){
+        unlink($row["file"].".zip");
     }
     if(htmlspecialchars($_SESSION["username"]) == $row["author"]){
         $stmt = $link->prepare("DELETE FROM `comment` WHERE id = ?");
@@ -294,8 +293,8 @@ function del(){
 function changetitle() {
 
     require_once('config.php');
-
-    $title = $_POST['webtitle'];
+    session_start();
+    $title = htmlspecialchars($_POST['webtitle']);
     if(!isset($_POST['webtitle']) || $title == ""){
         echo "<script type='text/javascript'>";
         echo "alert('欄位不能為空');";
@@ -303,14 +302,30 @@ function changetitle() {
         echo "</script>";
         return;
     }
-    $sql = "UPDATE `webtitle` SET `title`='$title' WHERE `id`=1";
-    $result = mysqli_query($link , $sql) or die('MySQL query error');
-    mysqli_close($link);
+
+    $authority = 1;
+    $username = htmlspecialchars($_SESSION["username"]);
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `username` = ? AND `authority` = ?");
+    $stmt->bind_param("si", $username, $authority);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    
+    if($row == ""){
+        header('Location: index.php');
+        return;
+    }
+
+    $id = 1;
+    $stmt = $link->prepare("UPDATE `webtitle` SET `title`=? WHERE `id`=?");
+    $stmt->bind_param("si", $title, $id);
+    $stmt->execute();
     echo "<script type='text/javascript'>";
     echo "alert('修改成功');";
     echo "location.href='index.php';";
     echo "</script>";
-    
+    $stmt->close();
+    $link->close();
 }
 
 function bbcodeconverter($text) {
@@ -363,17 +378,21 @@ function ImageProcessing($fileInput, $dest){
     else {
         $file = $fileInput['tmp_name'];
         $dest = $dest . $fileInput['name'];
-    
-        //將檔案移至指定位置
-        move_uploaded_file($file, $dest);
+        //將檔案破壞並移至指定位置
+        $suc = breakImage($file, $dest);
+        if($suc === false){
+            echo "<script type='text/javascript'>";
+            echo "alert('照片出錯');";
+            echo "</script>";
+            return false;
+        }
+        
         return true;
     }
 }
 function UploadFile($tempFile) {
 
     require_once('config.php');
-    require_once('AES.php');
-    $AES = new AES(AES_PASSWORD);
   //檢查檔案是否已經存在
   if (file_exists('file/' . $tempFile['name'])){
     echo "<script type='text/javascript'>";
@@ -391,9 +410,11 @@ function UploadFile($tempFile) {
   }
   else {
     $file = $tempFile['tmp_name'];
-    $dest = 'file/' . $tempFile['name'];
-    $enc = $AES -> encrypt(file_get_contents($file));
-    setFile($enc, $dest);
+    $dest = 'file/' . $tempFile['name'].'.zip';
+    $password = AES_PASSWORD;
+    $output;
+    $rc;
+    exec("zip -P $password $dest $file", $outputs, $rc);
     return true;
     }
 
@@ -402,36 +423,33 @@ function UploadFile($tempFile) {
 
 function DownloadFile(){
     require_once('config.php');
-    require_once('AES.php');
 
     if(isset($_GET["fl"])){
         $file = $_GET["fl"];
-        if (file_exists($file)) {
-            
+        
+        if (file_exists($file.'.zip')) {
+            $password = AES_PASSWORD;
+            $zipFile = $file . '.zip';
+            $unzipFilePath = "temp/";
+            $rc;
+            $output;
+            exec("unzip -P $password -o $zipFile -d $unzipFilePath");
+            $filename = glob('temp/tmp/*');
+            rename( $filename[0], $unzipFilePath."tmp/".substr($file, 5));
+            $newFileName = $unzipFilePath."tmp/".substr($file, 5);
             header('Content-Description: File Transfer');
             header('Content-Type: application/octet-stream');
-            header('Content-Disposition: attachment; filename='.basename($file));
+            header('Content-Disposition: attachment; filename='.basename($newFileName));
             header('Content-Transfer-Encoding: binary');
             header('Expires: 0');
             header('Cache-Control: must-revalidate');
             header('Pragma: public');
-            header('Content-Length: ' . filesize($file));
+            header('Content-Length: ' . filesize($newFileName));
             #ob_clean();
             flush();
-            $AES = new AES(AES_PASSWORD);
-            //加入到string
-            $content = file_get_contents($file);
-            //解密
-            $temp =  $AES->decrypt($content);
-
-            echo "<script type='text/javascript'>";
-            echo "alert($temp);";
-            echo "</script>";
-
-            //放入站存資料夾
-            #$tempDest = 'temp/'.substr($file, 5);
-            #setFile($temp, $tempDest);
-            #readfile($tempDest);
+            
+            readfile($newFileName);
+            unlink($newFileName);
             exit;
         }
     }
@@ -485,9 +503,105 @@ function setFile($msg, $dest)
     fwrite($fp, $msg);
     fclose($fp);
 }
-function decrypt($key, $garble)
-{
-    list($encrypted_data, $iv) = explode('::', base64_decode($garble), 2);
-    return openssl_decrypt($encrypted_data, 'aes-256-cbc', $key, 0, $iv);
+function breakImage($file, $dest){
+    if(file_exists($file)){
+        try{
+            $imageTmp;
+            $a = getimagesize($file);
+            switch ($a[2]) {
+                case IMAGETYPE_PNG:
+                    $imageTmp=imagecreatefrompng($file);
+                    break;
+                case IMAGETYPE_JPEG:
+                    $imageTmp=imagecreatefromjpeg($file);
+                    break;
+                case IMAGETYPE_GIF:
+                    $imageTmp=imagecreatefromgif($file);
+                    break;
+                case IMAGETYPE_BMP:
+                    $imageTmp=imagecreatefrombmp($file);
+                    break;
+                // Defaults to JPG
+                default:
+                    $imageTmp=imagecreatefromjpeg($file);
+                    break;
+            }
+            if($imageTmp === false){
+                return false;
+            }
+            $width = imagesx($imageTmp);
+            $height = imagesy($imageTmp);
+            if($width == 0 || $width == false || $height == 0 || $height == false){
+                return false;
+            }
+            $numbersWidthTable = range(0,$width-1);
+            $numbersHeightTable = range(0,$height-1);
+            shuffle ($numbersWidthTable);
+            shuffle ($numbersHeightTable);
+            $amountW = ceil($width*0.1);
+            $amountH = ceil($height*0.1);
+
+            $numbersWidth =array_slice($numbersWidthTable,0,$amountW);
+            $numbersHeight = array_slice($numbersHeightTable,0,$amountH);
+            
+            for ( $i = 1 ; $i < $amountW-1 ;$i++ ) {
+                for($j = 1; $j < $amountH-1; $j++){
+                    $color;
+                    $dir = rand(0, 3);
+                    $x = $numbersWidth[$i];
+                    $y = $numbersHeight[$j];
+                    switch($dir){
+                        case 0:
+                            if($x-1 >= 0)
+                                $x = $x-1;
+                            break;
+                        case 1:
+                            if($x+1 < $width)
+                                $x = $x+1;
+                            break;
+                        case 2:
+                            if($y-1 >= 0)
+                                $y = $y-1;
+                            break;
+                        case 3:
+                            if($y+1 < $height)
+                                $y = $y+1;
+                            break;
+                    }
+                    $color = imagecolorat($imageTmp, $x, $y);
+                    imagesetpixel($imageTmp, $numbersWidth[$i],$numbersHeight[$j], $color);
+                }
+            }
+
+            switch ($a[2]) {
+                case IMAGETYPE_PNG:
+                    imagepng($imageTmp, $dest);
+                    break;
+                case IMAGETYPE_JPEG:
+                    imagejpeg($imageTmp, $dest);
+                    break;
+                case IMAGETYPE_GIF:
+                    imagegif($imageTmp, $dest);
+                    break;
+                case IMAGETYPE_BMP:
+                    imagebmp($imageTmp, $dest);
+                    break;
+                // Defaults to JPG
+                default:
+                    imagejpeg($imageTmp, $dest);
+                    break;
+            }
+
+            #move_uploaded_file($imageTmp, $dest);
+            imagedestroy($imageTmp);
+            return true;
+        }
+        catch (Exception $e) {
+            return false;
+        }
+
+    }
+    
 }
+
 ?>

@@ -1,13 +1,14 @@
 <?php
 	include_once "config.php";
 	session_start();
-	$id = $_GET["id"];
-    $sql="SELECT * FROM `comment` WHERE `id` = '$id'";
-	$result = mysqli_query($link , $sql) or die('MySQL query error');
-   	$row = mysqli_fetch_array($result);
-	//if($_SESSION["username"]!=$row["author"])
-    	
-    
+	$id = htmlspecialchars($_GET["id"]);
+    $stmt = $link->prepare("SELECT * FROM `comment` WHERE `id` = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+    $link->close();
 ?>
 
 

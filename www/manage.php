@@ -7,16 +7,22 @@
         echo "</script>";
     }
     
-    $sql = "SELECT * FROM `account` WHERE `username` = '{$_SESSION["username"]}' AND `authority` = 1;";
-    $result = mysqli_query($link , $sql) or die('MySQL query error');
-    mysqli_close($link);
-    $row = mysqli_fetch_array($result); 
+    $authority = 1;
+    $username = htmlspecialchars($_SESSION["username"]);
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `username` = ? AND `authority` = ?");
+    $stmt->bind_param("si", $username, $authority);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+
     if($row == ""){
         echo "<script type='text/javascript'>";
         echo "alert('你沒有權限編輯這個頁面');";
         echo "location.href='index.php';";
         echo "</script>";
     }
+    $stmt->close();
+    $link->close();
 ?>
 
 <!DOCTYPE html>

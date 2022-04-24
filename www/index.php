@@ -1,32 +1,42 @@
 <?php 
     require_once("config.php");
     session_start();
+
     $sql = "SELECT * FROM `comment` ORDER BY `time` DESC";
 	$result = mysqli_query($link , $sql) or die('MySQL query error');
 
-    $sql = "SELECT * FROM `webtitle` WHERE `id` = 1";
-    $titleResult = mysqli_query($link , $sql) or die('MySQL query error');
-    
-    $sql = "SELECT * FROM `account` WHERE `authority` = 1;";
-    $accountRes = mysqli_query($link , $sql) or die('MySQL query error');
-    
 
-    $admin = mysqli_fetch_array($accountRes);
-    $row = mysqli_fetch_array($titleResult);
+    $titleID = 1;
+    $stmt = $link->prepare("SELECT * FROM `webtitle` WHERE `id` = ?");
+    $stmt->bind_param("i", $titleID);
+    $stmt->execute();
+    $titleResult = $stmt->get_result();
+    $row = $titleResult->fetch_assoc();
+
+    $authorityLevel = 1;
+    $stmt = $link->prepare("SELECT * FROM `account` WHERE `authority` = ?");
+    $stmt->bind_param("i", $authorityLevel);
+    $stmt->execute();
+    $accountRes = $stmt->get_result();
+    $admin = $accountRes->fetch_assoc();
+    
     $webtitle = $row['title'];
 
 
     $account = "";
     $ShotSrc = "default.png";
     if(isset($_SESSION["username"])){
-        $account=$_SESSION["username"];
-        $sql = "SELECT `pic` FROM `account` WHERE `username` = '$account';";
-        $shotResult = mysqli_query($link , $sql) or die('MySQL query error');
-        
-        $pic = mysqli_fetch_array($shotResult);
+        $account=htmlspecialchars($_SESSION["username"]);
+
+        $stmt = $link->prepare("SELECT `pic` FROM `account` WHERE `username` = ?");
+        $stmt->bind_param("s", $account);
+        $stmt->execute();
+        $shotResult = $stmt->get_result();
+        $pic = $shotResult->fetch_assoc();
         $ShotSrc = $pic['pic'];
     }
-    mysqli_close($link);
+    $stmt->close();
+    $link->close();
     
 ?>
 
