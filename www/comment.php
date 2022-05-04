@@ -34,11 +34,16 @@
                 <p><?php echo $row["content"];?></p>
             </div>
             <p><?php if(isset($_SESSION["username"]) &&$_SESSION["username"]==$row["author"]){?>
-                    <button class="SubmitButton" onclick="window.open('api.php?method=delete&id=<?php echo $row["id"] ?>','_self')">刪除</button>
+                <form class="MessageForm" method="POST" enctype="multipart/form-data" action="api.php?method=delete">
+                    <input type="hidden" name="token" value="<?php echo $_SESSION['token'] ?? '' ?>">
+                    <input type="hidden" name="id" value="<?php echo $row["id"] ?>">
+                    <button class="SubmitButton" >刪除</button>
+
+                </form>
                 <?php }?>
             <button class="SubmitButton" onclick="window.open('index.php','_self')">返回</button>
             <?php if(isset($row["file"]) && $row["file"] != ""){ ?>
-                <button class="SubmitButton" onclick="window.open('api.php?method=download&fl=<?php echo $row["file"] ?>','_self')">下載</button>
+                <button class="SubmitButton" onclick="window.open('api.php?method=download&id=<?php echo $row["id"] ?>','_self')">下載</button>
                 <nobr><?php echo substr($row["file"], 5)?></nobr>
             <?php } ?>
             </p>

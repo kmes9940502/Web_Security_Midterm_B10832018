@@ -57,6 +57,7 @@ function login() {
         if($row){
             session_start();
             $_SESSION["username"] = $row['username'];
+            $_SESSION['token'] = bin2hex(random_bytes(32));
             header("Location: index.php");
         }else{
             echo "<script type='text/javascript'>";
@@ -122,6 +123,7 @@ function signup() {
         //從檔案上傳
         if($_POST['from'] == "file"){
             $tempFile=$_FILES['img'];
+            $tempFile['name'] = htmlspecialchars($tempFile['name']);
             //確認上傳是否成功
             if ($tempFile['error'] === UPLOAD_ERR_OK){
                 //確認檔案大小 < 1MB
@@ -139,7 +141,7 @@ function signup() {
         }
         //從url上傳
         else{
-            $url=$_POST["urlTest"];
+            $url=htmlspecialchars($_POST["urlTest"]);
             $filename = 'shot/' . basename($url);
             $tempname = 'shot/'.'temp'.basename($url);
             if(isImage($url) === false){
@@ -187,7 +189,7 @@ function signup() {
 
 function logout() {
     session_start();
-    if(isset($_SESSION["username"])){
+    if(isset($_SESSION["username"]) || isset($_SESSION['token'])){
         session_destroy();
         echo "<script type='text/javascript'>";
         echo "alert('登出成功');";
@@ -197,10 +199,11 @@ function logout() {
 } 
 //TODO:實作檔案上傳
 function addcomment() {
-
+    //csrf防護
     require_once('config.php');
 
     session_start();
+
     $username = htmlspecialchars($_SESSION["username"]);
     $content = bbcodeconverter($_POST["content"]);
 
@@ -229,6 +232,14 @@ function addcomment() {
         echo "</script>";
         return;
     }
+    $token = htmlspecialchars($_POST['token']);
+    if (!$token || $token !== $_SESSION['token']) {
+        $stmt->close();
+        $link->close();
+        header($_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed');
+        return;
+    }
+    $_SESSION['token'] = bin2hex(random_bytes(32));
     $time = date('Y-m-d H:i:s');
 
     //上傳檔案
@@ -254,9 +265,10 @@ function addcomment() {
     header('Location: index.php');
 }
 function del(){
+    //todo:跨站攻擊問題
     require_once('config.php');
     session_start();
-    $id = htmlspecialchars($_GET["id"]);
+    $id = htmlspecialchars($_POST["id"]);
 
     $stmt = $link->prepare("SELECT `author`, `file` FROM `comment` WHERE id = ?");
     $stmt->bind_param("i", $id);
@@ -265,15 +277,23 @@ function del(){
     $row = $result->fetch_assoc();
     $stmt->close();
 
-    //刪除檔案
-    if(file_exists($row["file"].".zip")){
-        unlink($row["file"].".zip");
+    $token = htmlspecialchars($_POST['token']);
+    if (!$token || $token !== $_SESSION['token']) {
+        $link->close();
+        header($_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed');
+        return;
     }
+    $_SESSION['token'] = bin2hex(random_bytes(32));
+
+    //刪除檔案
+    
     if(htmlspecialchars($_SESSION["username"]) == $row["author"]){
         $stmt = $link->prepare("DELETE FROM `comment` WHERE id = ?");
         $stmt->bind_param("i", $id);
         $stmt->execute();
-        
+        if(file_exists($row["file"].".zip")){
+            unlink($row["file"].".zip");
+        }
         echo "<script type='text/javascript'>";
         echo "alert('刪除留言成功');";
         echo "location.href='index.php';";
@@ -391,7 +411,7 @@ function ImageProcessing($fileInput, $dest){
     }
 }
 function UploadFile($tempFile) {
-
+    //檔名用base64編碼
     require_once('config.php');
   //檢查檔案是否已經存在
   if (file_exists('file/' . $tempFile['name'])){
@@ -422,11 +442,20 @@ function UploadFile($tempFile) {
 }
 
 function DownloadFile(){
+    //todo:exec做防護
     require_once('config.php');
+    session_start();
+    $id = htmlspecialchars($_GET["id"]);
 
-    if(isset($_GET["fl"])){
-        $file = $_GET["fl"];
-        
+    $stmt = $link->prepare("SELECT `file` FROM `comment` WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    $stmt->close();
+    $link->close();
+    $file = $row["file"];
+    if(isset($file)){
         if (file_exists($file.'.zip')) {
             $password = AES_PASSWORD;
             $zipFile = $file . '.zip';

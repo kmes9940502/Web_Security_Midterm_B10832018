@@ -81,6 +81,7 @@
 			    <p>
                     <button class="SubmitButton">送出</button>
                     <input type="file" name="my_file">
+                    <input type="hidden" name="token" value="<?php echo $_SESSION['token'] ?? '' ?>">
                 </p>
             <?php }?> 
             </div>
